@@ -1,0 +1,53 @@
+version: '3'
+services:
+  juice-shop:
+    image: bkimminich/juice-shop
+    container_name: juice-shop
+    restart: always
+    ports:
+      - "3000:3000"
+
+  dvwa:
+    image: vulnerables/web-dvwa
+    container_name: dvwa
+    restart: always
+    ports:
+      - "8081:80"
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+
+  mutillidae:
+    image: citizenstig/nowasp
+    container_name: mutillidae
+    restart: always
+    ports:
+      - "8082:80"
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+
+  tomcat:
+    image: tomcat:9.0
+    container_name: tomcat
+    restart: always
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./tomcat-users.xml:/usr/local/tomcat/conf/tomcat-users.xml
+
+  elasticsearch:
+    image: elasticsearch:1.4.2
+    container_name: elasticsearch
+    restart: always
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+
+  jenkins:
+    image: jenkins/jenkins:lts
+    container_name: jenkins
+    restart: always
+    ports:
+      - "8083:8080"
+      - "50000:50000"
+    environment:
+      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false

