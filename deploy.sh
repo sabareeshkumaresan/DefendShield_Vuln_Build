@@ -71,8 +71,23 @@ systemctl restart smbd
 ## Telnet
 echo "[+] Ensuring Telnet is running..."
 # Telnetd usually runs via inetd/xinetd. 
-systemctl enable inetd
-systemctl start inetd
+# Configure xinetd for telnet
+if [ -d "/etc/xinetd.d" ]; then
+    cat <<EOF > /etc/xinetd.d/telnet
+service telnet
+{
+    disable = no
+    flags = REUSE
+    socket_type = stream
+    wait = no
+    user = root
+    server = /usr/sbin/in.telnetd
+    log_on_failure += USERID
+}
+EOF
+fi
+systemctl enable xinetd
+systemctl restart xinetd
 
 ## NFS - Vulnerable Export
 echo "[+] Configuring NFS with no_root_squash..."
@@ -281,7 +296,7 @@ services:
     volumes:
       - ./tomcat-users.xml:/usr/local/tomcat/conf/tomcat-users.xml
   elasticsearch:
-    image: elasticsearch:1.4.2
+    build: ./es_vuln
     container_name: elasticsearch
     restart: always
     ports:
@@ -297,7 +312,22 @@ services:
     environment:
       - JAVA_OPTS=-Djenkins.install.runSetupWizard=false
 DOCKER
-    docker-compose up -d
+
+    # Create Dockerfile for Elasticsearch
+    mkdir -p es_vuln
+    cat <<EOF > es_vuln/Dockerfile
+FROM openjdk:8-jre
+RUN wget https://download.elastic.co/elasticsearch/elasticsearch/elasticsearch-1.4.2.tar.gz && \\
+    tar xzf elasticsearch-1.4.2.tar.gz && \\
+    mv elasticsearch-1.4.2 /elasticsearch && \\
+    rm elasticsearch-1.4.2.tar.gz
+WORKDIR /elasticsearch
+RUN echo 'script.disable_dynamic: false' >> /elasticsearch/config/elasticsearch.yml
+CMD ["/elasticsearch/bin/elasticsearch"]
+EXPOSE 9200 9300
+EOF
+
+    docker-compose up -d --build
 fi
 
 echo "[+] Build Complete!"
