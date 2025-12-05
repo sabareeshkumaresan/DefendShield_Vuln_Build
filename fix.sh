@@ -52,10 +52,11 @@ mkdir -p es_vuln
 # Create Dockerfile to build ES 1.4.2 locally
 # (This bypasses the deprecated manifest issue on Docker Hub)
 cat <<EOF > es_vuln/Dockerfile
-FROM openjdk:8-jre
+FROM eclipse-temurin:8-jre
 
 # Download and install Elasticsearch 1.4.2
-RUN wget https://download.elastic.co/elasticsearch/elasticsearch/elasticsearch-1.4.2.tar.gz && \\
+RUN apt-get update && apt-get install -y wget && \\
+    wget https://download.elastic.co/elasticsearch/elasticsearch/elasticsearch-1.4.2.tar.gz && \\
     tar xzf elasticsearch-1.4.2.tar.gz && \\
     mv elasticsearch-1.4.2 /elasticsearch && \\
     rm elasticsearch-1.4.2.tar.gz

@@ -316,8 +316,9 @@ DOCKER
     # Create Dockerfile for Elasticsearch
     mkdir -p es_vuln
     cat <<EOF > es_vuln/Dockerfile
-FROM openjdk:8-jre
-RUN wget https://download.elastic.co/elasticsearch/elasticsearch/elasticsearch-1.4.2.tar.gz && \\
+FROM eclipse-temurin:8-jre
+RUN apt-get update && apt-get install -y wget && \\
+    wget https://download.elastic.co/elasticsearch/elasticsearch/elasticsearch-1.4.2.tar.gz && \\
     tar xzf elasticsearch-1.4.2.tar.gz && \\
     mv elasticsearch-1.4.2 /elasticsearch && \\
     rm elasticsearch-1.4.2.tar.gz
